@@ -315,7 +315,7 @@ async def run_agentic_query(
         images_data.append(primary_scene)
 
         # If user asked a bi-temporal change question for this location
-        if any(w in query.lower() for w in ["change", "dates", "temporal", "between"]):
+        if any(w in query.lower() for w in ["change", "dates", "temporal", "between", "increased", "decreased", "unchanged", "expansion", "flood", "growth"]):
             t2_scene = LocationSatelliteFetcher.fetch_scene_for_location(lat=lat, lon=lon, display_name=display or "", zoom=zoom or 14)
             # Add realistic seasonal / morphological variance
             t2_rgb = np.copy(t2_scene["visual_rgb"]).astype(np.int16)

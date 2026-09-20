@@ -656,7 +656,9 @@ function applyTemporalVariation(imgSrc, dateStr, lat, lon) {
   return new Promise((resolve) => {
     if (!imgSrc) { resolve(''); return; }
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (imgSrc && !imgSrc.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => {
       try {
         const [yStr, mStr] = (dateStr || '2024-06').split('-');

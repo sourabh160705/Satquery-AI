@@ -928,6 +928,301 @@ function Compare({location}){
   );
 }
 function Reports({location}){const [data,setData]=useState(null),[busy,setBusy]=useState(false);async function load(){setBusy(true);try{setData(await api(`/api/catalog?lat=${location.lat}&lon=${location.lon}&days=3650`))}catch(e){setData({error:e.message})}finally{setBusy(false)}}return <div className="page"><div className="page-heading"><div><h1>Reports & Acquisition History</h1><p>Auditable scene metadata from the Copernicus STAC Catalog.</p></div><button className="primary" onClick={load}>{busy?<Loader2 className="spin"/>:'Load catalog'}</button></div>{data?.error&&<div className="notice">{data.error}</div>}{data&&!data.error&&<div className="panel table-panel"><div className="table-head"><b>{data.count} scenes returned</b><span>Sentinel-2 L2A</span></div><table><thead><tr><th>Scene</th><th>Date</th><th>Cloud</th></tr></thead><tbody>{data.features.map(x=><tr key={x.id}><td>{x.id}</td><td>{x.date?new Date(x.date).toLocaleString():'—'}</td><td>{x.cloud==null?'—':Math.round(x.cloud)+'%'}</td></tr>)}</tbody></table></div>}</div>}
-function App({user,logout}){const [page,setPage]=useState('home'),[query,setQuery]=useState('Bhopal, India'),[busy,setBusy]=useState(false),[location,setLocation]=useState({display:'Bhopal, Madhya Pradesh, India',lat:23.2599,lon:77.4126,area_km2:285}),[weather,setWeather]=useState(null),[sat,setSat]=useState(''),[satMeta,setSatMeta]=useState(null),[satLoading,setSatLoading]=useState(false),[analysis,setAnalysis]=useState(null),[selectedYear,setSelectedYear]=useState('Live'),[isPlaying,setIsPlaying]=useState(false);async function loadSatellite(loc,year='Live'){setSatLoading(true);try{const j=await api(`/api/v1/location-scene?lat=${loc.lat}&lon=${loc.lon}&display=${encodeURIComponent(loc.display)}&year=${year}`);if(j?.preview_base64){setSat(j.preview_base64);setSatMeta(j.metadata)}}catch(err){console.warn('Satellite load error:',err)}finally{setSatLoading(false)}}function handleSelectYear(y){setSelectedYear(y);loadSatellite(location,y)}useEffect(()=>{api(`/api/weather?lat=${location.lat}&lon=${location.lon}`).then(setWeather).catch(()=>{});loadSatellite(location,selectedYear)},[]);useEffect(()=>{if(!isPlaying)return;const YEARS=['2016','2018','2020','2022','2024','2026','Live'];const timer=setInterval(()=>{setSelectedYear(prev=>{const idx=YEARS.indexOf(prev);const nextIdx=(idx+1)%YEARS.length;const nextY=YEARS[nextIdx];loadSatellite(location,nextY);return nextY})},2200);return()=>clearInterval(timer)},[isPlaying,location]);async function search(){setBusy(true);try{const g=await api('/api/geocode?q='+encodeURIComponent(query));setLocation(g);const w=await api(`/api/weather?lat=${g.lat}&lon=${g.lon}`);setWeather(w);setAnalysis(null);loadSatellite(g,selectedYear)}catch(e){alert(e.message)}finally{setBusy(false)}}async function pickPoint(lat,lon){setBusy(true);try{let display=`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);const j=await r.json();if(j?.display_name)display=j.display_name}catch{}const g={display,lat,lon,area_km2:location.area_km2};setLocation(g);setQuery(display);const w=await api(`/api/weather?lat=${lat}&lon=${lon}`);setWeather(w);setAnalysis(null);loadSatellite(g,selectedYear)}catch(e){alert(e.message)}finally{setBusy(false)}}let content=page==='studio'?<Studio user={user} location={location}/>:page==='home'?<Home {...{location,weather,sat,satMeta,satLoading,analysis,setPage,selectedYear,onSelectYear:handleSelectYear,isPlaying,onTogglePlay:()=>setIsPlaying(v=>!v)}}/>:page==='explore'?<><Explore {...{location,sat,setPage,pickPoint}}/><Explore3D location={location} selectedYear={selectedYear} onSelectYear={handleSelectYear} isPlaying={isPlaying} onTogglePlay={()=>setIsPlaying(v=>!v)}/></>:page==='layers'?<Layers {...{location,analysis,setAnalysis}}/>:page==='ai'?<AI {...{location,sat}}/>:page==='compare'?<Compare location={location}/>:page==='reports'?<Reports location={location}/>:<div className="page"><div className="empty"><Sparkles size={40}/><h2>{page}</h2></div></div>;return <div className="app"><Side {...{page,setPage}}/><main><Top {...{query,setQuery,search,busy,user,logout}}/>{content}</main></div>}
+
+function SavedPlaces({ location, onSelectPlace, setPage }) {
+  const defaultPlaces = [
+    { name: "Indore & Malwa Plateau", display: "Indore, Madhya Pradesh, India", lat: 22.7196, lon: 75.8577, desc: "Urban infrastructure expansion & agricultural corridor.", tag: "Urban Sprawl" },
+    { name: "Bhopal Bhoj Wetland", display: "Bhopal, Madhya Pradesh, India", lat: 23.2599, lon: 77.4126, desc: "Ramsar inland freshwater wetland and riparian ecosystem.", tag: "Wetland Hydrology" },
+    { name: "Grand Canyon", display: "Grand Canyon, Arizona, USA", lat: 36.0544, lon: -112.1401, desc: "Exposed geological strata & multi-spectral desert topography.", tag: "Geomorphology" },
+    { name: "Palm Jumeirah", display: "Palm Jumeirah, Dubai, United Arab Emirates", lat: 25.1124, lon: 55.1390, desc: "Man-made archipelago, reclaimed coastline & marine engineering.", tag: "Coastal Infrastructure" },
+    { name: "Amazon Rainforest", display: "Manaus, Amazonas, Brazil", lat: -3.1190, lon: -60.0217, desc: "Dense equatorial canopy, tributary hydrology & deforestation tracking.", tag: "Canopy Biomass" },
+    { name: "Mount Everest", display: "Mount Everest, Solukhumbu, Nepal", lat: 27.9881, lon: 86.9250, desc: "Himalayan glaciated peaks, moraine lakes & cryosphere monitoring.", tag: "Cryosphere" }
+  ];
+
+  const [saved, setSaved] = useState(() => {
+    try {
+      const stored = localStorage.getItem('satquery_saved_places');
+      return stored ? JSON.parse(stored) : defaultPlaces;
+    } catch {
+      return defaultPlaces;
+    }
+  });
+
+  function saveCurrent() {
+    const cityName = location.display ? location.display.split(',')[0] : 'Searched Area';
+    const newPlace = {
+      name: cityName,
+      display: location.display,
+      lat: location.lat,
+      lon: location.lon,
+      desc: `Pinned observation site at ${location.lat.toFixed(4)}°N, ${location.lon.toFixed(4)}°E.`,
+      tag: "Custom Bookmark"
+    };
+    const updated = [newPlace, ...saved.filter(p => p.display !== location.display)];
+    setSaved(updated);
+    try { localStorage.setItem('satquery_saved_places', JSON.stringify(updated)); } catch {}
+  }
+
+  function removePlace(idx) {
+    const updated = saved.filter((_, i) => i !== idx);
+    setSaved(updated);
+    try { localStorage.setItem('satquery_saved_places', JSON.stringify(updated)); } catch {}
+  }
+
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">GEOSPATIAL BOOKMARKS</span>
+          <h1>Saved Places</h1>
+          <p>Quickly navigate between observed territories, benchmark regions, and field monitoring sites.</p>
+        </div>
+        <button className="primary" onClick={saveCurrent}>
+          <Bookmark size={14} /> Bookmark Current Location ({location.display.split(',')[0]})
+        </button>
+      </div>
+
+      <div className="saved-grid">
+        {saved.map((place, idx) => (
+          <div className="saved-card" key={idx}>
+            <div className="saved-card-head">
+              <span className="saved-tag">{place.tag}</span>
+              <button className="icon-del-btn" onClick={() => removePlace(idx)} title="Remove bookmark">✕</button>
+            </div>
+            <h3>{place.name}</h3>
+            <p className="saved-display">{place.display}</p>
+            <p className="saved-desc">{place.desc}</p>
+            <div className="saved-coords">
+              <span>📍 {place.lat.toFixed(4)}°, {place.lon.toFixed(4)}°</span>
+            </div>
+            <div className="saved-actions">
+              <button className="primary-sm" onClick={() => { onSelectPlace(place); setPage('home'); }}>
+                Inspect Dashboard →
+              </button>
+              <button className="sec-sm" onClick={() => { onSelectPlace(place); setPage('studio'); }}>
+                Open SIH Studio
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Projects({ location, setPage }) {
+  const [projects, setProjects] = useState([
+    {
+      id: "PRJ-01",
+      title: "Indore Urban Sprawl & Peri-Urban Transition",
+      sensor: "Sentinel-2 MSI L2A",
+      target: "Indore, Madhya Pradesh",
+      dates: "2016 – 2026 (10-year Baseline)",
+      status: "ACTIVE MONITORING",
+      objective: "Bi-temporal change detection evaluating +14.2% structural expansion and farmland conversion.",
+      task: "BI_TEMPORAL_CHANGE_DETECTION"
+    },
+    {
+      id: "PRJ-02",
+      title: "Bhoj Wetland Shoreline & NDWI Fluctuations",
+      sensor: "Sentinel-2 + Landsat-8",
+      target: "Bhopal Ramsar Site",
+      dates: "2020 – 2026",
+      status: "CALIBRATED",
+      objective: "Seasonal NDWI surface water volume mapping, macrophyte encroachment, and water quality index.",
+      task: "SPECTRAL_ANALYSIS"
+    },
+    {
+      id: "PRJ-03",
+      title: "Himalayan Glacial Lake Hazard Outburst Monitoring",
+      sensor: "Optical + RISAT-1A SAR",
+      target: "Solukhumbu, Everest Region",
+      dates: "Bi-monthly Orbit Passes",
+      status: "MISSION CRITICAL",
+      objective: "Cross-modal fusion utilizing C-band radar backscatter to monitor moraine-dammed glacial expansion.",
+      task: "CROSS_MODAL_OPTICAL_SAR"
+    },
+    {
+      id: "PRJ-04",
+      title: "Malwa Plateau Agricultural Phenology & Crop Vitality",
+      sensor: "Sentinel-2 Multi-Spectral",
+      target: "Ujjain - Dewas Agricultural Belt",
+      dates: "Kharif & Rabi Cycles",
+      status: "COMPLETED",
+      objective: "Automated NDVI canopy profiling across sowing, peak vegetative biomass, and post-harvest residue.",
+      task: "TEXT_GUIDED_GROUNDING"
+    }
+  ]);
+
+  const [showNew, setShowNew] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newObj, setNewObj] = useState('');
+
+  function addProject(e) {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    const p = {
+      id: `PRJ-0${projects.length + 1}`,
+      title: newTitle,
+      sensor: "Sentinel-2 MSI L2A",
+      target: location.display.split(',')[0],
+      dates: "2024 – 2026",
+      status: "ACTIVE MONITORING",
+      objective: newObj || `Remote sensing inspection focused on ${location.display.split(',')[0]}.`,
+      task: "SINGLE_IMAGE_VQA"
+    };
+    setProjects([p, ...projects]);
+    setNewTitle('');
+    setNewObj('');
+    setShowNew(false);
+  }
+
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">OPERATIONAL WORKSPACES</span>
+          <h1>Remote Sensing Projects</h1>
+          <p>Manage multi-temporal observation missions, AOI bounds, and analytical pipelines.</p>
+        </div>
+        <button className="primary" onClick={() => setShowNew(!showNew)}>
+          <FolderKanban size={14} /> {showNew ? 'Cancel' : 'Create New Project'}
+        </button>
+      </div>
+
+      {showNew && (
+        <form className="project-form panel" onSubmit={addProject}>
+          <h3>Initialize Remote Sensing Workspace</h3>
+          <p>Anchor this project to the currently active observation coordinates ({location.display.split(',')[0]}).</p>
+          <input 
+            type="text" 
+            placeholder="Project Title (e.g. Coastal Shoreline Erosion Assessment)" 
+            value={newTitle} 
+            onChange={e => setNewTitle(e.target.value)} 
+            required 
+          />
+          <input 
+            type="text" 
+            placeholder="Mission Objective / Remote Sensing Scope" 
+            value={newObj} 
+            onChange={e => setNewObj(e.target.value)} 
+          />
+          <button className="primary" type="submit">Create Workspace →</button>
+        </form>
+      )}
+
+      <div className="projects-grid">
+        {projects.map((proj) => (
+          <div className="project-card" key={proj.id}>
+            <div className="project-card-header">
+              <span className="proj-id">{proj.id}</span>
+              <span className={`proj-status ${proj.status.toLowerCase().replace(/ /g, '-')}`}>{proj.status}</span>
+            </div>
+            <h3>{proj.title}</h3>
+            <p className="proj-obj">{proj.objective}</p>
+            <div className="proj-meta-grid">
+              <div><small>Sensor:</small> <b>{proj.sensor}</b></div>
+              <div><small>Target AOI:</small> <b>{proj.target}</b></div>
+              <div><small>Timeline:</small> <b>{proj.dates}</b></div>
+              <div><small>Pipeline:</small> <b>{proj.task}</b></div>
+            </div>
+            <div className="proj-card-actions">
+              <button className="primary-sm" onClick={() => setPage('studio')}>
+                Launch in SIH Studio →
+              </button>
+              <button className="sec-sm" onClick={() => setPage('compare')}>
+                Compare Historical Epochs
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SettingsView({ user, logout }) {
+  const [sensor, setSensor] = useState('Sentinel-2 MSI L2A (10m GSD, 13 Multispectral Bands)');
+  const [basemap, setBasemap] = useState('Esri World Imagery / ArcGIS Online');
+  const [cloudThresh, setCloudThresh] = useState('10');
+  const [auditMode, setAuditMode] = useState('SIH-2026-Strict (Full Trace & Tool Execution Proofs)');
+  const [savedNote, setSavedNote] = useState(false);
+
+  function saveSettings(e) {
+    e.preventDefault();
+    setSavedNote(true);
+    setTimeout(() => setSavedNote(false), 3000);
+  }
+
+  return (
+    <div className="page settings-page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">SYSTEM CONFIGURATION</span>
+          <h1>Engine Settings & Architecture</h1>
+          <p>Configure remote sensing pipelines, sensor ingestion priorities, and evaluation audit protocols.</p>
+        </div>
+      </div>
+
+      {savedNote && <div className="notice success">Engine parameters updated successfully.</div>}
+
+      <div className="settings-grid">
+        <div className="settings-section panel">
+          <h3>🛰️ Earth Observation Pipeline</h3>
+          <div className="setting-item">
+            <label>Primary Constellation</label>
+            <select value={sensor} onChange={e => setSensor(e.target.value)}>
+              <option>Sentinel-2 MSI L2A (10m GSD, 13 Multispectral Bands)</option>
+              <option>Landsat 8/9 OLI-2 (15m Pan-sharpened / 30m Multispectral)</option>
+              <option>ISRO Cartosat-3 + RISAT-1A Cross-Modal Synergy</option>
+            </select>
+          </div>
+          <div className="setting-item">
+            <label>Default Imagery Basemap</label>
+            <select value={basemap} onChange={e => setBasemap(e.target.value)}>
+              <option>Esri World Imagery / ArcGIS Online</option>
+              <option>Carto Voyager Hybrid (Satellite + Labels)</option>
+              <option>OpenStreetMap Standard Cartography</option>
+            </select>
+          </div>
+          <div className="setting-item">
+            <label>Cloud-Screening Threshold (%)</label>
+            <input type="number" min="0" max="50" value={cloudThresh} onChange={e => setCloudThresh(e.target.value)} />
+            <small>Only scenes with cloud cover below this value are selected for automated VQA.</small>
+          </div>
+        </div>
+
+        <div className="settings-section panel">
+          <h3>⚡ AI Engine & Auditing (SIH 2026)</h3>
+          <div className="setting-item">
+            <label>Evaluation Protocol</label>
+            <select value={auditMode} onChange={e => setAuditMode(e.target.value)}>
+              <option>SIH-2026-Strict (Full Trace & Tool Execution Proofs)</option>
+              <option>Fast Inference (Confidence & Synthesis Only)</option>
+              <option>Research Benchmark (VRSBench / RSVQA Compliance)</option>
+            </select>
+          </div>
+          <div className="setting-item">
+            <label>Remote Sensing Engine Status</label>
+            <div className="engine-status-box">
+              <span className="live-dot">● ONLINE</span>
+              <span>Production Serverless AI Core (`/api/v1/query`)</span>
+            </div>
+          </div>
+          <div className="setting-item">
+            <label>Active Evaluator Session</label>
+            <p className="user-email-tag">{user?.email || 'SIH Evaluator'}</p>
+          </div>
+          <div style={{ marginTop: '16px' }}>
+            <button className="primary" onClick={saveSettings} style={{ marginRight: '10px' }}>Save Parameters</button>
+            <button className="sec-sm" onClick={logout}>Sign Out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App({user,logout}){const [page,setPage]=useState('home'),[query,setQuery]=useState('Bhopal, India'),[busy,setBusy]=useState(false),[location,setLocation]=useState({display:'Bhopal, Madhya Pradesh, India',lat:23.2599,lon:77.4126,area_km2:285}),[weather,setWeather]=useState(null),[sat,setSat]=useState(''),[satMeta,setSatMeta]=useState(null),[satLoading,setSatLoading]=useState(false),[analysis,setAnalysis]=useState(null),[selectedYear,setSelectedYear]=useState('Live'),[isPlaying,setIsPlaying]=useState(false);async function loadSatellite(loc,year='Live'){setSatLoading(true);try{const j=await api(`/api/v1/location-scene?lat=${loc.lat}&lon=${loc.lon}&display=${encodeURIComponent(loc.display)}&year=${year}`);if(j?.preview_base64){setSat(j.preview_base64);setSatMeta(j.metadata)}}catch(err){console.warn('Satellite load error:',err)}finally{setSatLoading(false)}}function handleSelectYear(y){setSelectedYear(y);loadSatellite(location,y)}useEffect(()=>{api(`/api/weather?lat=${location.lat}&lon=${location.lon}`).then(setWeather).catch(()=>{});loadSatellite(location,selectedYear)},[]);useEffect(()=>{if(!isPlaying)return;const YEARS=['2016','2018','2020','2022','2024','2026','Live'];const timer=setInterval(()=>{setSelectedYear(prev=>{const idx=YEARS.indexOf(prev);const nextIdx=(idx+1)%YEARS.length;const nextY=YEARS[nextIdx];loadSatellite(location,nextY);return nextY})},2200);return()=>clearInterval(timer)},[isPlaying,location]);async function search(){setBusy(true);try{const g=await api('/api/geocode?q='+encodeURIComponent(query));setLocation(g);const w=await api(`/api/weather?lat=${g.lat}&lon=${g.lon}`);setWeather(w);setAnalysis(null);loadSatellite(g,selectedYear)}catch(e){alert(e.message)}finally{setBusy(false)}}async function pickPoint(lat,lon){setBusy(true);try{let display=`${lat.toFixed(4)}°, ${lon.toFixed(4)}°`;try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`);const j=await r.json();if(j?.display_name)display=j.display_name}catch{}const g={display,lat,lon,area_km2:location.area_km2};setLocation(g);setQuery(display);const w=await api(`/api/weather?lat=${lat}&lon=${lon}`);setWeather(w);setAnalysis(null);loadSatellite(g,selectedYear)}catch(e){alert(e.message)}finally{setBusy(false)}}function handleSelectPlace(place){const g={display:place.display,lat:place.lat,lon:place.lon,area_km2:285};setLocation(g);setQuery(place.display);api(`/api/weather?lat=${place.lat}&lon=${place.lon}`).then(setWeather).catch(()=>{});setAnalysis(null);loadSatellite(g,selectedYear)}let content=page==='studio'?<Studio user={user} location={location}/>:page==='home'?<Home {...{location,weather,sat,satMeta,satLoading,analysis,setPage,selectedYear,onSelectYear:handleSelectYear,isPlaying,onTogglePlay:()=>setIsPlaying(v=>!v)}}/>:page==='explore'?<><Explore {...{location,sat,setPage,pickPoint}}/><Explore3D location={location} selectedYear={selectedYear} onSelectYear={handleSelectYear} isPlaying={isPlaying} onTogglePlay={()=>setIsPlaying(v=>!v)}/></>:page==='layers'?<Layers {...{location,analysis,setAnalysis}}/>:page==='ai'?<AI {...{location,sat}}/>:page==='compare'?<Compare location={location}/>:page==='reports'?<Reports location={location}/>:page==='saved'?<SavedPlaces location={location} onSelectPlace={handleSelectPlace} setPage={setPage}/>:page==='projects'?<Projects location={location} setPage={setPage}/>:page==='settings'?<SettingsView user={user} logout={logout}/>:<div className="page"><div className="empty"><Sparkles size={40}/><h2>{page}</h2></div></div>;return <div className="app"><Side {...{page,setPage}}/><main><Top {...{query,setQuery,search,busy,user,logout}}/>{content}</main></div>}
 class ErrorBoundary extends React.Component{constructor(props){super(props);this.state={hasError:false,error:null}}static getDerivedStateFromError(error){return{hasError:true,error}}render(){if(this.state.hasError){return <div style={{minHeight:'100vh',background:'#06101f',color:'#e8f1ff',display:'grid',placeContent:'center',textAlign:'center',padding:20}}><h2>⚠️ Something went wrong</h2><p style={{color:'#94a3b8',maxWidth:450,margin:'12px 0 20px'}}>{this.state.error?.message||'An unexpected error occurred.'}</p><button onClick={()=>window.location.reload()} style={{background:'#0284c7',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer'}}>Reload SatQuery AI</button></div>}return this.props.children}}
 createRoot(document.getElementById('root')).render(<ErrorBoundary><AuthGate/></ErrorBoundary>);

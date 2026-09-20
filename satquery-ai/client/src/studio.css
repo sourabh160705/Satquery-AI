@@ -725,3 +725,46 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Basemap Switcher on Explore Map */
+.basemap-switcher {
+  position: absolute;
+  top: 12px;
+  left: 50px;
+  z-index: 500;
+  display: flex;
+  background: rgba(6, 22, 41, 0.92);
+  border: 1px solid #234c69;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.basemap-switcher button {
+  background: transparent;
+  border: none;
+  padding: 6px 11px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s ease;
+}
+
+.basemap-switcher button:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.basemap-switcher button.active {
+  background: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.5);
+}
+

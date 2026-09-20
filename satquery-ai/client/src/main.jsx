@@ -134,8 +134,9 @@ function GlobeView({
             zoomControl={false}
           >
             <TileLayer
-              attribution="&copy; OpenStreetMap"
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={19}
             />
             <ZoomControl position="bottomright"/>
             <Map2D location={location} zoom={zoom}/>
@@ -366,7 +367,288 @@ function Home({
     </div>
   );
 }
-function Explore({location,sat,setPage,pickPoint}){const [active,setActive]=useState('truecolor'),[overlay,setOverlay]=useState(sat),[opacity,setOpacity]=useState(.76),[busy,setBusy]=useState(false),[map,setMap]=useState(null),[error,setError]=useState('');const layers=[['truecolor','Satellite imagery','Natural color','truecolor'],['ndvi','Vegetation / NDVI','Plant health','ndvi'],['urban','Urban growth','Built-up signal','urban'],['ndwi','Water bodies','Surface water','ndwi'],['temperature','Temperature','Weather context',null]];async function selectLayer(key,type,date='latest'){setActive(key);if(!type){setOverlay('');return}setBusy(true);setError('');try{const j=await api(`/api/satellite?lat=${location.lat}&lon=${location.lon}&date=${date}&type=${type}`);setOverlay(j.url)}catch(e){setError(e.message);setOverlay('')}finally{setBusy(false)}}function locate(){map?.setView([location.lat,location.lon],11,{animate:true})}useEffect(()=>{if(overlay&&map)map.fitBounds([[location.lat-.045,location.lon-.045],[location.lat+.045,location.lon+.045]],{animate:true,maxZoom:14})},[overlay,map]);return <div className="page"><div className="page-heading"><div><span className="eyebrow">FIELD CONSOLE / {location.lat.toFixed(2)}°, {location.lon.toFixed(2)}°</span><h1>Explore Earth</h1><p>Turn a location into a living picture. Toggle a signal, inspect the evidence, then ask AI what changed.</p></div><div className="explore-status"><span className="status-pulse"/>Live scene <small>updated just now</small></div></div><div className="explore-layout"><div><div className="map-large"><MapContainer center={[location.lat,location.lon]} zoom={11} className="map" whenReady={e=>setMap(e.target)}><TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/><ClickCatcher onPick={(lat,lon)=>pickPoint(lat,lon)}/>{overlay&&<ImageOverlay url={overlay} bounds={[[location.lat-.045,location.lon-.045],[location.lat+.045,location.lon+.045]]} opacity={opacity}/>}<Marker position={[location.lat,location.lon]} icon={pin}><Popup><b>{location.display}</b><br/>Analysis center</Popup></Marker></MapContainer><div className="map-float"><button onClick={()=>map?.zoomIn()} title="Zoom in"><Plus/></button><button onClick={()=>map?.zoomOut()} title="Zoom out"><Minus/></button><button onClick={locate} title="Center on location"><LocateFixed/></button></div>{busy&&<div className="map-loading"><Loader2 className="spin" size={16}/> Rendering {layers.find(x=>x[0]===active)?.[1]}…</div>}<div className="map-caption"><span className="live-dot">● LIVE</span><span>{layers.find(x=>x[0]===active)?.[1]}</span><span>Sentinel-2 L2A · least cloudy</span></div></div><div className="explore-insights"><div><span className="mini-label">CURRENT FOCUS</span><b>{location.display.split(',')[0]}</b><small>Analysis radius · 10 km</small></div><div><span className="mini-label">SCENE QUALITY</span><b>Cloud-aware</b><small>Best available scene selected</small></div><div><span className="mini-label">WHAT NEXT?</span><b>Compare a date</b><small>See how this place changed</small></div></div></div><aside className="layer-panel explore-panel"><div className="layer-panel-head"><div><span className="eyebrow">SIGNAL STACK</span><h3>Map layers</h3></div><span className="layer-count">{layers.length}</span></div>{error&&<div className="layer-error">{error}</div>}{layers.map(([key,label,desc,type])=><button className={active===key?'layer-active':''} key={key} onClick={()=>selectLayer(key,type)}><span className="layer-icon">{key==='truecolor'?'◉':key==='ndvi'?'✦':key==='urban'?'▦':key==='ndwi'?'≈':'°'}</span><span><b>{label}</b><small>{desc}</small></span><span className={'toggle '+(active===key?'on':'')}/></button>)}<div className="layer-settings"><label><span>Overlay intensity</span><b>{Math.round(opacity*100)}%</b></label><input type="range" min=".2" max="1" step=".05" value={opacity} onChange={e=>setOpacity(Number(e.target.value))}/></div><div className="legend"><span className="mini-label">SIGNAL LEGEND</span><div><i className="legend-gradient"/><span>low</span><span>high</span></div><small>{active==='ndvi'?'Green indicates stronger vegetation signal.':active==='ndwi'?'Blue indicates likely surface water.':active==='urban'?'Warm tones indicate built-up signal.':'Natural color composite from Sentinel-2.'}</small></div><button className="primary wide" onClick={()=>setPage('compare')}>Compare across time →</button></aside></div><div className="scene-strip"><div><span className="eyebrow">SCENE TIMELINE</span><h3>Recent acquisitions</h3></div>{[['12 Jun 2026','2026-06-12'],['28 May 2026','2026-05-28'],['14 May 2026','2026-05-14']].map(([date,iso],i)=><button key={date} onClick={()=>selectLayer('truecolor','truecolor',iso)} className={i===0?'scene-active':''}><span className="scene-dot"/><span><b>{date}</b><small>{i===0?'Selected scene':'Available scene'} · {i*7+3}% cloud</small></span></button>)}<div className="scene-help">Click any signal to re-render the scene<br/><span>Data: Copernicus Sentinel Hub</span></div></div></div>}
+function Explore({location,sat,setPage,pickPoint}){
+  const [active,setActive]=useState('truecolor');
+  const [baseLayer,setBaseLayer]=useState('satellite'); // 'satellite' | 'hybrid' | 'streets'
+  const [overlay,setOverlay]=useState('');
+  const [opacity,setOpacity]=useState(.76);
+  const [busy,setBusy]=useState(false);
+  const [map,setMap]=useState(null);
+  const [error,setError]=useState('');
+
+  const layers=[
+    ['truecolor','Satellite imagery','Natural color (Full High-Res)','truecolor'],
+    ['ndvi','Vegetation / NDVI','Plant health & canopy density','ndvi'],
+    ['urban','Urban growth','Built-up spectral signal','urban'],
+    ['ndwi','Water bodies','Surface water & moisture','ndwi'],
+    ['temperature','Temperature','Weather context & elevation',null]
+  ];
+
+  async function selectLayer(key,type,date='latest'){
+    setActive(key);
+    setError('');
+    if(key==='truecolor'){
+      setBaseLayer('satellite');
+      setOverlay('');
+      return;
+    }
+    if(!type){
+      setOverlay('');
+      return;
+    }
+    setBusy(true);
+    try{
+      const j=await api(`/api/satellite?lat=${location.lat}&lon=${location.lon}&date=${date}&type=${type}`);
+      if(j?.url){
+        setOverlay(j.url);
+      }
+    }catch(e){
+      setError(e.message);
+      setOverlay('');
+    }finally{
+      setBusy(false);
+    }
+  }
+
+  function locate(){
+    map?.flyTo([location.lat,location.lon],12,{animate:true,duration:1});
+  }
+
+  useEffect(()=>{
+    if(map&&location?.lat&&location?.lon){
+      map.flyTo([location.lat,location.lon],map.getZoom()||12,{animate:true,duration:1});
+    }
+  },[location?.lat,location?.lon,map]);
+
+  const activeMeta=layers.find(x=>x[0]===active);
+  const aoiBounds=[[location.lat-.045,location.lon-.045],[location.lat+.045,location.lon+.045]];
+
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">FIELD CONSOLE / {location.lat.toFixed(2)}°, {location.lon.toFixed(2)}°</span>
+          <h1>Explore Earth</h1>
+          <p>Turn a location into a living picture. Toggle a signal, inspect the evidence, then ask AI what changed.</p>
+        </div>
+        <div className="explore-status">
+          <span className="status-pulse"/>
+          Live scene <small>updated just now</small>
+        </div>
+      </div>
+
+      <div className="explore-layout">
+        <div>
+          <div className="map-large">
+            <MapContainer
+              center={[location.lat,location.lon]}
+              zoom={12}
+              className="map"
+              whenReady={e=>setMap(e.target)}
+            >
+              {baseLayer==='streets'?(
+                <TileLayer
+                  attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>"
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  maxZoom={19}
+                />
+              ):(
+                <TileLayer
+                  attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                  maxZoom={19}
+                />
+              )}
+
+              {baseLayer==='hybrid'&&(
+                <TileLayer
+                  attribution="&copy; CARTO"
+                  url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png"
+                  maxZoom={19}
+                  opacity={0.85}
+                />
+              )}
+
+              <ClickCatcher onPick={(lat,lon)=>pickPoint(lat,lon)}/>
+
+              {overlay&&active!=='truecolor'&&(
+                <ImageOverlay
+                  url={overlay}
+                  bounds={aoiBounds}
+                  opacity={opacity}
+                />
+              )}
+
+              <Marker position={[location.lat,location.lon]} icon={pin}>
+                <Popup>
+                  <b>{location.display}</b><br/>
+                  Analysis center: {location.lat.toFixed(4)}°, {location.lon.toFixed(4)}°
+                </Popup>
+              </Marker>
+            </MapContainer>
+
+            {/* Basemap Switcher */}
+            <div className="basemap-switcher">
+              <button
+                className={baseLayer==='satellite'?'active':''}
+                onClick={()=>setBaseLayer('satellite')}
+                title="Seamless High-Resolution Satellite Imagery"
+              >
+                🛰️ Satellite
+              </button>
+              <button
+                className={baseLayer==='hybrid'?'active':''}
+                onClick={()=>setBaseLayer('hybrid')}
+                title="Satellite Imagery with Road & Place Labels"
+              >
+                🌐 Hybrid
+              </button>
+              <button
+                className={baseLayer==='streets'?'active':''}
+                onClick={()=>setBaseLayer('streets')}
+                title="Standard Cartographic Road Map"
+              >
+                🗺️ Streets
+              </button>
+            </div>
+
+            <div className="map-float">
+              <button onClick={()=>map?.zoomIn()} title="Zoom in"><Plus/></button>
+              <button onClick={()=>map?.zoomOut()} title="Zoom out"><Minus/></button>
+              <button onClick={locate} title="Center on location"><LocateFixed/></button>
+            </div>
+
+            {busy&&(
+              <div className="map-loading">
+                <Loader2 className="spin" size={16}/> Rendering {activeMeta?.[1]}…
+              </div>
+            )}
+
+            <div className="map-caption">
+              <span className="live-dot">● LIVE</span>
+              <span>{activeMeta?.[1]}</span>
+              <span>{baseLayer==='streets'?'OpenStreetMap Cartography':'High-Res Optical Satellite (Sentinel-2 / ESRI World Imagery)'}</span>
+            </div>
+          </div>
+
+          <div className="explore-insights">
+            <div>
+              <span className="mini-label">CURRENT FOCUS</span>
+              <b>{location.display.split(',')[0]}</b>
+              <small>Analysis radius · 10 km</small>
+            </div>
+            <div>
+              <span className="mini-label">SCENE QUALITY</span>
+              <b>Cloud-aware</b>
+              <small>Full sub-meter resolution</small>
+            </div>
+            <div>
+              <span className="mini-label">WHAT NEXT?</span>
+              <b>Compare a date</b>
+              <small>See how this place changed</small>
+            </div>
+          </div>
+        </div>
+
+        <aside className="layer-panel explore-panel">
+          <div className="layer-panel-head">
+            <div>
+              <span className="eyebrow">SIGNAL STACK</span>
+              <h3>Map layers</h3>
+            </div>
+            <span className="layer-count">{layers.length}</span>
+          </div>
+
+          {error&&<div className="layer-error">{error}</div>}
+
+          {layers.map(([key,label,desc,type])=>(
+            <button
+              className={active===key?'layer-active':''}
+              key={key}
+              onClick={()=>selectLayer(key,type)}
+            >
+              <span className="layer-icon">
+                {key==='truecolor'?'◉':key==='ndvi'?'✦':key==='urban'?'▦':key==='ndwi'?'≈':'°'}
+              </span>
+              <span>
+                <b>{label}</b>
+                <small>{desc}</small>
+              </span>
+              <span className={'toggle '+(active===key?'on':'')}/>
+            </button>
+          ))}
+
+          {active!=='truecolor'&&overlay&&(
+            <div className="layer-settings">
+              <label>
+                <span>Overlay intensity</span>
+                <b>{Math.round(opacity*100)}%</b>
+              </label>
+              <input
+                type="range"
+                min=".2"
+                max="1"
+                step=".05"
+                value={opacity}
+                onChange={e=>setOpacity(Number(e.target.value))}
+              />
+            </div>
+          )}
+
+          <div className="legend">
+            <span className="mini-label">SIGNAL LEGEND</span>
+            <div>
+              <i className="legend-gradient"/>
+              <span>low</span>
+              <span>high</span>
+            </div>
+            <small>
+              {active==='ndvi'
+                ? 'Green indicates stronger vegetation canopy & crop vitality.'
+                : active==='ndwi'
+                ? 'Blue indicates surface water bodies, rivers, and wetland inundation.'
+                : active==='urban'
+                ? 'Warm orange/crimson indicates built-up infrastructure and impervious surfaces.'
+                : 'True-color natural satellite imagery across entire region.'}
+            </small>
+          </div>
+
+          <button className="primary wide" onClick={()=>setPage('compare')}>
+            Compare across time →
+          </button>
+        </aside>
+      </div>
+
+      <div className="scene-strip">
+        <div>
+          <span className="eyebrow">SCENE TIMELINE</span>
+          <h3>Recent acquisitions</h3>
+        </div>
+        {[
+          ['12 Jun 2026','2026-06-12'],
+          ['28 May 2026','2026-05-28'],
+          ['14 May 2026','2026-05-14']
+        ].map(([date,iso],i)=>(
+          <button
+            key={date}
+            onClick={()=>selectLayer('truecolor','truecolor',iso)}
+            className={i===0&&active==='truecolor'?'scene-active':''}
+          >
+            <span className="scene-dot"/>
+            <span>
+              <b>{date}</b>
+              <small>{i===0?'Latest orbit':'Historical pass'} · {i*7+3}% cloud</small>
+            </span>
+          </button>
+        ))}
+        <div className="scene-help">
+          Click any signal to re-render the scene<br/>
+          <span>Data: Copernicus Sentinel-2 / ESRI World Imagery</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 function Explore3D({location, selectedYear, onSelectYear, isPlaying, onTogglePlay}){return <div className="page explore-orbit-page"><div className="panel-title"><div><span className="eyebrow">ORBITAL CONTEXT</span><h3>See the wider picture</h3><small>Spin the globe or scrub the multi-temporal timeline.</small></div><span className="live-dot">● LIVE POSITION</span></div><GlobeView location={location} selectedYear={selectedYear} onSelectYear={onSelectYear} isPlaying={isPlaying} onTogglePlay={onTogglePlay}/></div>}
 function Layers({location,analysis,setAnalysis}){const [busy,setBusy]=useState(false);async function run(){setBusy(true);try{setAnalysis(await api(`/api/analysis?lat=${location.lat}&lon=${location.lon}&date=latest`))}catch(e){setAnalysis({error:e.message})}finally{setBusy(false)}}const help={ndvi:['Vegetation health','Brown = sparse or stressed · green = stronger vegetation'],ndwi:['Surface water','Tan = dry land · blue = stronger water signal'],urban:['Built-up intensity','Green = less built-up · orange = stronger built-up signal']};return <div className="page"><div className="page-heading"><div><h1>AI Earth Intelligence</h1><p>Real spectral layers generated from Sentinel-2 bands.</p></div><button className="primary" onClick={run}>{busy?<Loader2 className="spin"/>:<Activity/>} Run analysis</button></div>{analysis?.error&&<div className="notice">{analysis.error}</div>}<div className="analysis-grid">{[['ndvi','Vegetation · NDVI',Leaf],['ndwi','Water · NDWI',Droplets],['urban','Built-up signal',Building2]].map(([k,n,I])=><div className="analysis-card" key={k}><div className="analysis-title"><I/><b>{n}</b></div><div className="analysis-img">{analysis?.images?.[k]?<img src={analysis.images[k]} alt={`${n} satellite layer`}/>:<div className="placeholder">Run analysis</div>}</div><div className={`signal-legend ${k}`}><div className="legend-bar"/><div><span>Low</span><span>High</span></div></div><p className="signal-explainer"><b>{help[k][0]}:</b> {help[k][1]}.</p><small>Spectral signal, not ground truth. Validate before operational decisions.</small></div>)}</div></div>}
 function AI({location,sat}){const [q,setQ]=useState('Identify visible changes around this location.'),[msgs,setMsgs]=useState([]),[busy,setBusy]=useState(false);async function ask(){if(!q.trim())return;const text=q;setQ('');setMsgs(m=>[...m,{r:'u',t:text}]);setBusy(true);try{const j=await api('/api/ai',{method:'POST',body:JSON.stringify({question:text,location,imageData:sat})});setMsgs(m=>[...m,{r:'a',t:j.answer}])}catch(e){setMsgs(m=>[...m,{r:'a',t:e.message}])}finally{setBusy(false)}}return <div className="page ai-page"><div className="page-heading"><div><h1>AI Query</h1><p>Ask questions; AI can inspect the current satellite scene when configured.</p></div></div><div className="suggestions">{['Identify visible urban expansion','What does vegetation suggest?','What environmental risks should I inspect?'].map(x=><button onClick={()=>setQ(x)} key={x}>{x}</button>)}</div><div className="chat">{msgs.length===0&&<div className="bubble"><b>SatQuery AI</b><p>Ready for Earth-observation questions.</p></div>}{msgs.map((m,i)=><div className={m.r==='u'?'bubble user':'bubble'} key={i}><b>{m.r==='u'?'You':'SatQuery AI'}</b><p>{m.t}</p></div>)}{busy&&<div className="bubble"><Loader2 className="spin"/></div>}</div><div className="composer"><input value={q} onChange={e=>setQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()}/><button onClick={ask}><Send size={17}/></button></div></div>}

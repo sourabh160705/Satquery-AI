@@ -31,42 +31,59 @@ Traditional remote-sensing AI tools operate in isolation—requiring GIS domain 
 ```mermaid
 flowchart TD
     subgraph Client ["Frontend (React 18 + Vite)"]
-        UI[SIH Studio Workbench]
-        UP[GeoTIFF Multi-Slot Uploader]
-        Q[Natural Language Prompt]
-        VIEW[Visual Evidence & Overlay Viewer]
-        TRACE[Auditable Execution Trace Card]
-        EXP[Export Audit Report JSON/PDF]
+        UI["SIH Studio Workbench"]
+        UP["GeoTIFF Multi-Slot Uploader"]
+        Q["Natural Language Prompt"]
+        VIEW["Visual Evidence & Overlay Viewer"]
+        TRACE["Auditable Execution Trace Card"]
+        EXP["Export Audit Report (JSON / PDF)"]
     end
 
     subgraph Backend ["Python Agentic Engine (FastAPI :8000)"]
-        GW[API Gateway /api/v1]
+        GW["API Gateway (/api/v1)"]
         
         subgraph Controller ["Agentic Controller"]
-            IC[Intent Classifier]
-            VAL[Input & Metadata Validator]
-            ROUT[Model Registry Router]
-            SYNTH[Confidence & Synthesis Engine]
-            TRC[Auditable Trace Logger]
+            IC["Intent Classifier"]
+            VAL["Input & Metadata Validator"]
+            ROUT["Model Registry Router"]
+            SYNTH["Confidence & Synthesis Engine"]
+            TRC["Auditable Trace Logger"]
         end
         
         subgraph Specialists ["Specialist Tool Registry"]
-            VQA[RS-VQA Specialist]
-            CAP[BigEarthNet Captioner]
-            GRD[Region Grounding Engine]
-            CD[Bi-Temporal Change Specialist]
-            FUSE[Optical-SAR Fusion Core]
-            SPEC[Spectral Indices Engine (NDVI/NDWI)]
+            VQA["RS-VQA Specialist"]
+            CAP["BigEarthNet Captioner"]
+            GRD["Region Grounding Engine"]
+            CD["Bi-Temporal Change Specialist"]
+            FUSE["Optical-SAR Fusion Core"]
+            SPEC["Spectral Indices Engine (NDVI / NDWI)"]
         end
     end
 
-    UI --> UP & Q
+    UI --> UP
+    UI --> Q
     UP -->|GeoTIFF / Optical / SAR| GW
     Q -->|Natural Language Query| GW
-    GW --> IC --> VAL --> ROUT
-    ROUT --> VQA & CAP & GRD & CD & FUSE & SPEC
-    VQA & CAP & GRD & CD & FUSE & SPEC --> SYNTH --> TRC --> GW
-    GW --> VIEW & TRACE & EXP
+    GW --> IC
+    IC --> VAL
+    VAL --> ROUT
+    ROUT --> VQA
+    ROUT --> CAP
+    ROUT --> GRD
+    ROUT --> CD
+    ROUT --> FUSE
+    ROUT --> SPEC
+    VQA --> SYNTH
+    CAP --> SYNTH
+    GRD --> SYNTH
+    CD --> SYNTH
+    FUSE --> SYNTH
+    SPEC --> SYNTH
+    SYNTH --> TRC
+    TRC --> GW
+    GW --> VIEW
+    GW --> TRACE
+    GW --> EXP
 ```
 
 ---

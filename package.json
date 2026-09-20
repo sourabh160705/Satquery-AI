@@ -1,0 +1,8 @@
+{
+  "name": "satquery-ai-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix satquery-ai run build"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "buildCommand": "npm --prefix satquery-ai run build",
+  "outputDirectory": "satquery-ai/client/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/satquery-ai/api/"
+    },
+    {
+      "source": "/((?!api/.*).*)",
+      "destination": "/satquery-ai/client/dist/index.html"
+    }
+  ]
+}

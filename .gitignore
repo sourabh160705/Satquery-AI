@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+backend/venv/
+venv/
+.env
+.env.local
+*.env
+
+# Build outputs
+dist/
+build/
+client/dist/
+
+# Large binaries & temporary test dumps
+*.b64
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/satquery-ai/api/"
+      "destination": "/api/$1"
     },
     {
       "source": "/((?!api/.*).*)",
-      "destination": "/satquery-ai/client/dist/index.html"
+      "destination": "/index.html"
     }
   ]
 }

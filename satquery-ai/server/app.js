@@ -87,11 +87,10 @@ async function fetchLocationScene(lat,lon,displayName='',zoom=14,year='Live'){
 }
 
 // Health check
-app.get('/api/health',(q,s)=>s.json({ok:true,service:'SatQuery AI Remote Sensing Platform',status:'ONLINE'}));
-app.get('/',(q,s)=>s.json({ok:true,service:'SatQuery AI Remote Sensing Platform',status:'ONLINE'}));
+app.get(['/api/health','/health','/'],(q,s)=>s.json({ok:true,service:'SatQuery AI Remote Sensing Platform',status:'ONLINE'}));
 
 // Geocode (OpenStreetMap Nominatim)
-app.get('/api/geocode',optionalAuth,async(q,s)=>{
+app.get(['/api/geocode','/geocode'],optionalAuth,async(q,s)=>{
   try{
     const text=String(q.query.q||'').trim();
     if(!text)throw Error('Search query required');
@@ -114,7 +113,7 @@ app.get('/api/geocode',optionalAuth,async(q,s)=>{
 });
 
 // Weather (Open-Meteo)
-app.get('/api/weather',optionalAuth,async(q,s)=>{
+app.get(['/api/weather','/weather'],optionalAuth,async(q,s)=>{
   try{
     const lat=num(q.query.lat,'lat'),lon=num(q.query.lon,'lon');
     const u=new URL('https://api.open-meteo.com/v1/forecast');
@@ -135,7 +134,7 @@ app.get('/api/weather',optionalAuth,async(q,s)=>{
 });
 
 // Location Scene (Real high-res satellite imagery + multi-temporal timeline)
-app.get('/api/v1/location-scene',optionalAuth,async(q,s)=>{
+app.get(['/api/v1/location-scene','/api/location-scene','/v1/location-scene','/location-scene'],optionalAuth,async(q,s)=>{
   try{
     const lat=num(q.query.lat,'lat');
     const lon=num(q.query.lon,'lon');
@@ -150,7 +149,7 @@ app.get('/api/v1/location-scene',optionalAuth,async(q,s)=>{
 });
 
 // Satellite imagery & spectral layers
-app.get('/api/satellite',optionalAuth,async(q,s)=>{
+app.get(['/api/satellite','/satellite'],optionalAuth,async(q,s)=>{
   try{
     const lat=num(q.query.lat,'lat');
     const lon=num(q.query.lon,'lon');
@@ -169,7 +168,7 @@ app.get('/api/satellite',optionalAuth,async(q,s)=>{
 });
 
 // Analysis (NDVI, NDWI, Built-up)
-app.get('/api/analysis',optionalAuth,async(q,s)=>{
+app.get(['/api/analysis','/analysis'],optionalAuth,async(q,s)=>{
   try{
     const lat=num(q.query.lat,'lat');
     const lon=num(q.query.lon,'lon');
@@ -189,7 +188,7 @@ app.get('/api/analysis',optionalAuth,async(q,s)=>{
 });
 
 // Catalog across timeline epochs
-app.get('/api/catalog',optionalAuth,async(q,s)=>{
+app.get(['/api/catalog','/catalog'],optionalAuth,async(q,s)=>{
   const years=[2026,2024,2022,2020,2018,2016];
   const features=[];
   years.forEach(y=>{
@@ -203,7 +202,7 @@ app.get('/api/catalog',optionalAuth,async(q,s)=>{
 });
 
 // Benchmark Samples
-app.get('/api/v1/benchmark-samples',(q,s)=>{
+app.get(['/api/v1/benchmark-samples','/api/benchmark-samples','/v1/benchmark-samples','/benchmark-samples'],(q,s)=>{
   s.json({
     samples:[
       {
@@ -251,7 +250,7 @@ app.get('/api/v1/benchmark-samples',(q,s)=>{
 });
 
 // Model Registry
-app.get('/api/v1/registry',(q,s)=>{
+app.get(['/api/v1/registry','/api/registry','/v1/registry','/registry'],(q,s)=>{
   s.json({
     agentic_framework:'SatQuery-Orchestrator-v1',
     registered_specialists:[
@@ -265,7 +264,7 @@ app.get('/api/v1/registry',(q,s)=>{
 });
 
 // Agentic Query
-app.post('/api/v1/query',optionalAuth,async(q,s)=>{
+app.post(['/api/v1/query','/api/query','/v1/query','/query'],optionalAuth,async(q,s)=>{
   try{
     const queryText=String(q.body?.query||'').trim();
     const lat=q.body?.lat?parseFloat(q.body.lat):23.2599;
@@ -314,7 +313,7 @@ app.post('/api/v1/query',optionalAuth,async(q,s)=>{
 });
 
 // AI Query
-app.post('/api/ai',optionalAuth,async(q,s)=>{
+app.post(['/api/ai','/ai'],optionalAuth,async(q,s)=>{
   try{
     const {question,location}=q.body||{};
     if(process.env.GROQ_API_KEY){

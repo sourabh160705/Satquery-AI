@@ -28,6 +28,11 @@ Traditional remote-sensing AI tools operate in isolation—requiring GIS domain 
 
 ## 🏗️ System Architecture
 
+![SatQuery AI System Architecture](satquery_architecture.png)
+
+<details>
+<summary><b>Click to expand Mermaid Source Code</b></summary>
+
 ```mermaid
 flowchart TD
     subgraph Client ["Frontend (React 18 + Vite)"]
@@ -85,6 +90,7 @@ flowchart TD
     GW --> TRACE
     GW --> EXP
 ```
+</details>
 
 ---
 
